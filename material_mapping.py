@@ -1,9 +1,13 @@
 from pathlib import Path
 import json
 import unreal
+import tkinter as tk
+from tkinter import filedialog, simpledialog
+
 
 def get_material_map(path):
     return json.load(path.open())
+
 
 def get_file_location(object, channel, object_to_material_map):
     for obj, channel_map in object_to_material_map.items():
@@ -12,14 +16,11 @@ def get_file_location(object, channel, object_to_material_map):
                 if channel == chan:
                     return file
 
-def create_material(asset_name, package_path):
-    # Erstelle Material Factory
-    material_factory = unreal.MaterialFactoryNew()
 
-    # AssetTools instanziieren
+def create_material(asset_name, package_path):
+    material_factory = unreal.MaterialFactoryNew()
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
-    # Neues Material-Asset erstellen
     new_material = asset_tools.create_asset(
         asset_name=asset_name,
         package_path=package_path,
@@ -28,25 +29,22 @@ def create_material(asset_name, package_path):
     )
 
     if new_material:
-        # Asset speichern
         unreal.EditorAssetLibrary.save_loaded_asset(new_material)
         return new_material
     else:
         print("Fehler: Material konnte nicht erstellt werden.")
         return None
 
+
 def import_texture(file_path, destination_path):
-    # Erstelle eine Import-Task
     task = unreal.AssetImportTask()
-    task.set_editor_property("filename", str (file_path))
+    task.set_editor_property("filename", str(file_path))
     task.set_editor_property("destination_path", destination_path)
     task.set_editor_property("replace_existing", True)
     task.set_editor_property("automated", True)
 
-    # Import durchführen
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks([task])
 
-    # Überprüfen, ob der Import erfolgreich war
     imported_asset = task.get_editor_property("imported_object_paths")
     if imported_asset:
         imported_texture = unreal.EditorAssetLibrary.load_asset(imported_asset[0])
@@ -55,18 +53,15 @@ def import_texture(file_path, destination_path):
         print(f"Fehler: Textur '{file_path}' konnte nicht importiert werden.")
         return None
 
-def add_one_texture_to_material(material, texture, channel):
-    # Use MaterialEditingLibrary
-    editor_subsystem = unreal.MaterialEditingLibrary
 
-    # Create a Texture Sample Expression
+def add_one_texture_to_material(material, texture, channel):
+    editor_subsystem = unreal.MaterialEditingLibrary
     texture_sample = editor_subsystem.create_material_expression(
         material,
         unreal.MaterialExpressionTextureSample,
     )
-    texture_sample.texture = texture  # Assign the texture to the expression
+    texture_sample.texture = texture
 
-    # Connect the texture to the specified material channel
     if channel == unreal.MaterialProperty.MP_NORMAL:
         texture_sample.sampler_type = unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL
     editor_subsystem.connect_material_property(texture_sample, "RGB", channel)
@@ -83,36 +78,70 @@ def remap_channels(data, remap_dict):
         updated_data[obj] = updated_channels
     return updated_data
 
+
 def add_all_textures_to_material(material, material_map):
     for channel, origin in material_map.items():
-        if not (origin == None):
+        if origin:
             destination = unreal.EditorAssetLibrary.get_path_name(material)
             texture = import_texture(origin, destination)
             if texture:
                 add_one_texture_to_material(material, texture, channel)
 
 
+def get_user_input():
+    root = tk.Tk()
+    root.withdraw()
 
-#Path zum Json file:
-path = Path(r"N:\GOLEMS_FATE\crew\Jan\Scripts\NachhilfeMitJochen\test.json")
+    # JSON-Dateipfad auswählen
+    json_path = filedialog.askopenfilename(
+        title="Wähle die JSON-Datei",
+        filetypes=[("JSON Files", "*.json")]
+    )
+    if not json_path:
+        raise ValueError("Keine JSON-Datei ausgewählt.")
 
-channel_remap = {
-    "baseColor": unreal.MaterialProperty.MP_BASE_COLOR,
-    "opacity" : unreal.MaterialProperty.MP_OPACITY,
-    "normalCamera": unreal.MaterialProperty.MP_NORMAL,
-    "metalness": unreal.MaterialProperty.MP_METALLIC,
-    "specularRoughness": unreal.MaterialProperty.MP_ROUGHNESS
-}
+    # Asset-Name eingeben
+    asset_name = simpledialog.askstring("Asset Name", "Gib den Namen des Materials ein:")
+    if not asset_name:
+        raise ValueError("Kein Asset-Name eingegeben.")
 
-package_path = "/Game/MyMaterials"
-asset_name = "MyNewMaterial"
-object_to_material_map = get_material_map(path)
-map = remap_channels(object_to_material_map, channel_remap )
-print("***Hier ist die neue Map:", map, "***")
+    # Package-Path eingeben
+    package_path = simpledialog.askstring(
+        "Package Path", "Gib den Zielordner für das Material ein (z.B. /Game/MyMaterials):"
+    )
+    if not package_path:
+        raise ValueError("Kein Package-Path eingegeben.")
 
-for obj, material_map in map.items():
-    material = create_material(asset_name, package_path)
-    
-    print(obj)
-    print("schau mal: ", material_map)
-    add_all_textures_to_material(material, material_map)
+    return Path(json_path), asset_name, package_path
+
+
+def start_script():
+    try:
+        json_path, asset_name, package_path = get_user_input()
+
+        channel_remap = {
+            "baseColor": unreal.MaterialProperty.MP_BASE_COLOR,
+            "opacity": unreal.MaterialProperty.MP_OPACITY,
+            "normalCamera": unreal.MaterialProperty.MP_NORMAL,
+            "metalness": unreal.MaterialProperty.MP_METALLIC,
+            "specularRoughness": unreal.MaterialProperty.MP_ROUGHNESS
+        }
+
+        object_to_material_map = get_material_map(json_path)
+        mapped_data = remap_channels(object_to_material_map, channel_remap)
+        print("*** Hier ist die neue Map:", mapped_data, "***")
+
+        for obj, material_map in mapped_data.items():
+            material = create_material(asset_name, package_path)
+            if material:
+                print(f"Material {asset_name} für {obj} erstellt.")
+                add_all_textures_to_material(material, material_map)
+
+    except ValueError as e:
+        unreal.log_error(f"Script abgebrochen: {e}")
+    except Exception as e:
+        unreal.log_error(f"Fehler im Script: {e}")
+
+
+# Start des Scripts
+start_script()

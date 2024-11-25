@@ -1,21 +1,20 @@
 import json
 import unreal
 import os
-
 from pathlib import Path
 from tkinter import *
 from tkinter.ttk import *
 from tkinter.filedialog import askdirectory
-from tkinter import Tk
-from tkinter import filedialog, simpledialog
-from tkinter.filedialog import askopenfilename
-from tkinter import Tk, Label, Button
+from tkinter import simpledialog, Tk, Label, Button
+
 
 def get_material_map(path):
+    """Loads the material mapping from a JSON file."""
     return json.load(path.open())
 
 
 def get_file_location(object, channel, object_to_material_map):
+    """Retrieves the file path for a specific object and channel from the material map."""
     for obj, channel_map in object_to_material_map.items():
         if object == obj:
             for chan, file in channel_map.items():
@@ -24,6 +23,7 @@ def get_file_location(object, channel, object_to_material_map):
 
 
 def create_material(asset_name, package_path):
+    """Creates a new material asset in the specified package path."""
     material_factory = unreal.MaterialFactoryNew()
     asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 
@@ -38,11 +38,12 @@ def create_material(asset_name, package_path):
         unreal.EditorAssetLibrary.save_loaded_asset(new_material)
         return new_material
     else:
-        print("Fehler: Material konnte nicht erstellt werden.")
+        print("Error: Material creation failed.")
         return None
 
 
 def import_texture(file_path, destination_path):
+    """Imports a texture from the specified file path into the destination path."""
     task = unreal.AssetImportTask()
     task.set_editor_property("filename", str(file_path))
     task.set_editor_property("destination_path", destination_path)
@@ -56,11 +57,12 @@ def import_texture(file_path, destination_path):
         imported_texture = unreal.EditorAssetLibrary.load_asset(imported_asset[0])
         return imported_texture
     else:
-        print(f"Fehler: Textur '{file_path}' konnte nicht importiert werden.")
+        print(f"Error: Texture '{file_path}' import failed.")
         return None
 
 
 def add_one_texture_to_material(material, texture, channel):
+    """Adds a single texture to the material at the specified channel."""
     editor_subsystem = unreal.MaterialEditingLibrary
     texture_sample = editor_subsystem.create_material_expression(
         material,
@@ -74,6 +76,7 @@ def add_one_texture_to_material(material, texture, channel):
 
 
 def remap_channels(data, remap_dict):
+    """Remaps the channels in the material map based on a provided dictionary."""
     updated_data = {}
     for obj, channels in data.items():
         updated_channels = {}
@@ -86,6 +89,7 @@ def remap_channels(data, remap_dict):
 
 
 def add_all_textures_to_material(material, material_map):
+    """Adds all textures from the material map to the material."""
     for channel, origin in material_map.items():
         if origin:
             destination = unreal.EditorAssetLibrary.get_path_name(material)
@@ -93,56 +97,61 @@ def add_all_textures_to_material(material, material_map):
             if texture:
                 add_one_texture_to_material(material, texture, channel)
 
+
 def select_json_file():
+    """Prompts the user to select a JSON file."""
     json_file_path = askopenfilename(
         initialdir="N:/GOLEMS_FATE/character",
-        title="Wähle die JSON-Datei aus",
-        filetypes=[("JSON Dateien", "*.json"), ("Alle Dateien", "*.*")]
+        title="Select a JSON file",
+        filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")]
     )
     if json_file_path:
-        print("Gewählte JSON-Datei:", json_file_path)
+        print("Selected JSON file:", json_file_path)
         return json_file_path
     else:
-        print("Keine Datei ausgewählt.")
+        print("No file selected.")
         return None
 
+
 def get_user_input():
-    # Versuche, den ausgewählten Ordner zu ermitteln
+    """
+    Prompts the user for necessary inputs including the JSON file, asset name,
+    and package path for material creation.
+    """
+    # Try to retrieve the selected folder path
     selected_paths = unreal.EditorUtilityLibrary.get_selected_folder_paths()
 
     if not selected_paths:
-        raise ValueError("Kein Ordner im Content Browser aktiv oder ausgewählt.")
+        raise ValueError("No folder selected in the Content Browser.")
     else:
-        # Verwende den ausgewählten Ordnerpfad
+        # Use the selected folder path
         content_path = selected_paths[0]
         
-        # Entferne das `/All`-Präfix, falls vorhanden
+        # Remove "/All" prefix if present
         if content_path.startswith("/All/"):
             content_path = content_path.replace("/All", "", 1)
         
-        unreal.log(f"Verwende ausgewählten Ordner: {content_path}")
+        unreal.log(f"Using selected folder: {content_path}")
 
-
-    # JSON-Dateipfad auswählen (Tkinter verwenden)
+    # Select the JSON file (Tkinter)
     json_file_path = select_json_file()
 
-    # Asset-Name eingeben (Unreal-Dialog)
-    asset_name = simpledialog.askstring("Asset Name", "Gib den Namen des Materials ein:")
+    # Prompt for asset name (Unreal dialog)
+    asset_name = simpledialog.askstring("Asset Name", "Enter the name of the material:")
     if not asset_name:
-        raise ValueError("Kein Asset-Name eingegeben.")
+        raise ValueError("No asset name provided.")
 
     return Path(json_file_path), asset_name, content_path
 
 
-# Beispiel-Aufruf: Dies ersetzt den vorherigen Aufruf von `get_user_input`.
 def show_start_dialog():
     """
-    Zeigt ein Dialogfenster an, um den Benutzer zu fragen, ob er fortfahren möchte.
-    Gibt `True` zurück, wenn der Benutzer fortfahren möchte, und `False` bei Abbruch.
+    Displays a dialog asking the user if they want to proceed.
+    Returns True if the user agrees, False if they cancel.
     """
-    # Tkinter-Hauptfenster initialisieren
+    # Initialize Tkinter window
     root = Tk()
-    root.title("Chose a Json-File")
+    root.title("Choose a JSON File")
     root.geometry("300x100")
     user_choice = {"continue": False}
 
@@ -154,7 +163,7 @@ def show_start_dialog():
         user_choice["continue"] = False
         root.destroy()
 
-    Label(root, text="Please Select a Json-File?").pack(pady=10)
+    Label(root, text="Please select a JSON file").pack(pady=10)
     Button(root, text="Select File", command=on_continue).pack(side="left", padx=20)
     Button(root, text="Cancel", command=on_cancel).pack(side="right", padx=20)
 
@@ -162,21 +171,20 @@ def show_start_dialog():
     return user_choice["continue"]
 
 
-# Beispiel-Aufruf
 def start_script():
+    """Main function that orchestrates the process of material creation and texture import."""
     try:
         if not show_start_dialog():
-            unreal.log_warning("Script wurde vom Benutzer abgebrochen.")
+            unreal.log_warning("Script was canceled by the user.")
             return
 
         json_path, asset_name, package_path = get_user_input()
 
-        unreal.log(f"JSON-Pfad: {json_path}")
-        unreal.log(f"Asset-Name: {asset_name}")
-        unreal.log(f"Package-Pfad: {package_path}")
+        unreal.log(f"JSON Path: {json_path}")
+        unreal.log(f"Asset Name: {asset_name}")
+        unreal.log(f"Package Path: {package_path}")
 
-        # Füge hier deine weiteren Verarbeitungsschritte ein.
-
+        # Mapping channels for materials
         channel_remap = {
             "baseColor": unreal.MaterialProperty.MP_BASE_COLOR,
             "opacity": unreal.MaterialProperty.MP_OPACITY,
@@ -187,19 +195,19 @@ def start_script():
 
         object_to_material_map = get_material_map(json_path)
         mapped_data = remap_channels(object_to_material_map, channel_remap)
-        print("*** Hier ist die neue Map:", mapped_data, "***")
+        print("*** Here is the new map:", mapped_data, "***")
 
         for obj, material_map in mapped_data.items():
             material = create_material(asset_name, package_path)
             if material:
-                print(f"Material {asset_name} für {obj} erstellt.")
+                print(f"Material {asset_name} created for {obj}.")
                 add_all_textures_to_material(material, material_map)
 
     except ValueError as e:
-        unreal.log_error(f"Script abgebrochen: {e}")
+        unreal.log_error(f"Script aborted: {e}")
     except Exception as e:
-        unreal.log_error(f"Fehler im Script: {e}")
+        unreal.log_error(f"Error in script: {e}")
 
 
-# Skript starten
+# Run the script
 start_script()

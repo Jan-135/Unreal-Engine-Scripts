@@ -5,7 +5,7 @@ from pathlib import Path
 from tkinter import *
 from tkinter.ttk import *
 from tkinter.filedialog import askdirectory
-from tkinter import simpledialog, Tk, Label, Button
+from tkinter import filedialog, simpledialog, Tk, Label, Button
 
 
 def get_material_map(path):
@@ -113,35 +113,41 @@ def select_json_file():
         return None
 
 
-def get_user_input():
+def get_user_input(object_to_material_map):
     """
-    Prompts the user for necessary inputs including the JSON file, asset name,
-    and package path for material creation.
+    Prompts the user for asset names based on the number of objects in the JSON file.
+    Returns a list of asset names corresponding to each object.
     """
-    # Try to retrieve the selected folder path
+    # Retrieve the selected folder path
     selected_paths = unreal.EditorUtilityLibrary.get_selected_folder_paths()
 
     if not selected_paths:
         raise ValueError("No folder selected in the Content Browser.")
     else:
-        # Use the selected folder path
         content_path = selected_paths[0]
         
-        # Remove "/All" prefix if present
         if content_path.startswith("/All/"):
             content_path = content_path.replace("/All", "", 1)
         
         unreal.log(f"Using selected folder: {content_path}")
 
-    # Select the JSON file (Tkinter)
+    # Select the JSON file
     json_file_path = select_json_file()
 
-    # Prompt for asset name (Unreal dialog)
-    asset_name = simpledialog.askstring("Asset Name", "Enter the name of the material:")
-    if not asset_name:
-        raise ValueError("No asset name provided.")
+    # Load the material map
+    object_to_material_map = get_material_map(Path(json_file_path))
 
-    return Path(json_file_path), asset_name, content_path
+    # Prompt for asset names dynamically based on the number of objects in the JSON file
+    asset_names = {}
+    for obj in object_to_material_map.keys():
+        asset_name = simpledialog.askstring(
+            "Asset Name", f"Enter the name for the material of object '{obj}':"
+        )
+        if not asset_name:
+            raise ValueError(f"No asset name provided for object '{obj}'.")
+        asset_names[obj] = asset_name
+
+    return Path(json_file_path), asset_names, content_path
 
 
 def show_start_dialog():
@@ -178,10 +184,10 @@ def start_script():
             unreal.log_warning("Script was canceled by the user.")
             return
 
-        json_path, asset_name, package_path = get_user_input()
+        json_path, asset_names, package_path = get_user_input({})  # Initial empty map, as get_user_input will populate it
 
         unreal.log(f"JSON Path: {json_path}")
-        unreal.log(f"Asset Name: {asset_name}")
+        unreal.log(f"Asset Names: {asset_names}")
         unreal.log(f"Package Path: {package_path}")
 
         # Mapping channels for materials
@@ -198,9 +204,9 @@ def start_script():
         print("*** Here is the new map:", mapped_data, "***")
 
         for obj, material_map in mapped_data.items():
-            material = create_material(asset_name, package_path)
+            material = create_material(asset_names[obj], package_path)
             if material:
-                print(f"Material {asset_name} created for {obj}.")
+                print(f"Material {asset_names[obj]} created for {obj}.")
                 add_all_textures_to_material(material, material_map)
 
     except ValueError as e:

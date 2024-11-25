@@ -1,9 +1,15 @@
-from pathlib import Path
 import json
 import unreal
-import tkinter as tk
-from tkinter import filedialog, simpledialog
+import os
 
+from pathlib import Path
+from tkinter import *
+from tkinter.ttk import *
+from tkinter.filedialog import askdirectory
+from tkinter import Tk
+from tkinter import filedialog, simpledialog
+from tkinter.filedialog import askopenfilename
+from tkinter import Tk, Label, Button
 
 def get_material_map(path):
     return json.load(path.open())
@@ -87,37 +93,89 @@ def add_all_textures_to_material(material, material_map):
             if texture:
                 add_one_texture_to_material(material, texture, channel)
 
+def select_json_file():
+    json_file_path = askopenfilename(
+        initialdir="N:/GOLEMS_FATE/character",
+        title="Wähle die JSON-Datei aus",
+        filetypes=[("JSON Dateien", "*.json"), ("Alle Dateien", "*.*")]
+    )
+    if json_file_path:
+        print("Gewählte JSON-Datei:", json_file_path)
+        return json_file_path
+    else:
+        print("Keine Datei ausgewählt.")
+        return None
 
 def get_user_input():
-    root = tk.Tk()
-    root.withdraw()
+    # Versuche, den ausgewählten Ordner zu ermitteln
+    selected_paths = unreal.EditorUtilityLibrary.get_selected_folder_paths()
 
-    # JSON-Dateipfad auswählen
-    json_path = filedialog.askopenfilename(
-        title="Wähle die JSON-Datei",
-        filetypes=[("JSON Files", "*.json")]
-    )
-    if not json_path:
-        raise ValueError("Keine JSON-Datei ausgewählt.")
+    if not selected_paths:
+        raise ValueError("Kein Ordner im Content Browser aktiv oder ausgewählt.")
+    else:
+        # Verwende den ausgewählten Ordnerpfad
+        content_path = selected_paths[0]
+        
+        # Entferne das `/All`-Präfix, falls vorhanden
+        if content_path.startswith("/All/"):
+            content_path = content_path.replace("/All", "", 1)
+        
+        unreal.log(f"Verwende ausgewählten Ordner: {content_path}")
 
-    # Asset-Name eingeben
+
+    # JSON-Dateipfad auswählen (Tkinter verwenden)
+    json_file_path = select_json_file()
+
+    # Asset-Name eingeben (Unreal-Dialog)
     asset_name = simpledialog.askstring("Asset Name", "Gib den Namen des Materials ein:")
     if not asset_name:
         raise ValueError("Kein Asset-Name eingegeben.")
 
-    # Package-Path eingeben
-    package_path = simpledialog.askstring(
-        "Package Path", "Gib den Zielordner für das Material ein (z.B. /Game/MyMaterials):"
-    )
-    if not package_path:
-        raise ValueError("Kein Package-Path eingegeben.")
-
-    return Path(json_path), asset_name, package_path
+    return Path(json_file_path), asset_name, content_path
 
 
+# Beispiel-Aufruf: Dies ersetzt den vorherigen Aufruf von `get_user_input`.
+def show_start_dialog():
+    """
+    Zeigt ein Dialogfenster an, um den Benutzer zu fragen, ob er fortfahren möchte.
+    Gibt `True` zurück, wenn der Benutzer fortfahren möchte, und `False` bei Abbruch.
+    """
+    # Tkinter-Hauptfenster initialisieren
+    root = Tk()
+    root.title("Chose a Json-File")
+    root.geometry("300x100")
+    user_choice = {"continue": False}
+
+    def on_continue():
+        user_choice["continue"] = True
+        root.destroy()
+
+    def on_cancel():
+        user_choice["continue"] = False
+        root.destroy()
+
+    Label(root, text="Please Select a Json-File?").pack(pady=10)
+    Button(root, text="Select File", command=on_continue).pack(side="left", padx=20)
+    Button(root, text="Cancel", command=on_cancel).pack(side="right", padx=20)
+
+    root.mainloop()
+    return user_choice["continue"]
+
+
+# Beispiel-Aufruf
 def start_script():
     try:
+        if not show_start_dialog():
+            unreal.log_warning("Script wurde vom Benutzer abgebrochen.")
+            return
+
         json_path, asset_name, package_path = get_user_input()
+
+        unreal.log(f"JSON-Pfad: {json_path}")
+        unreal.log(f"Asset-Name: {asset_name}")
+        unreal.log(f"Package-Pfad: {package_path}")
+
+        # Füge hier deine weiteren Verarbeitungsschritte ein.
 
         channel_remap = {
             "baseColor": unreal.MaterialProperty.MP_BASE_COLOR,
@@ -143,5 +201,5 @@ def start_script():
         unreal.log_error(f"Fehler im Script: {e}")
 
 
-# Start des Scripts
+# Skript starten
 start_script()
